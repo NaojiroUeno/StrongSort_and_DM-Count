@@ -186,7 +186,7 @@ def run(
                 # folder with imgs
                 else:
                     txt_file_name = p.parent.name  # get folder name containing current img
-                    save_path = str(save_dir / p.parent.name)  # im.jpg, vid.mp4, ...
+                    save_path = str(save_dir / p.parent.name)  # im.jpg, vid.mp4, ..
 
             curr_frames[i] = im0
 

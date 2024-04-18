@@ -1,5 +1,5 @@
 import torch
-from models import vgg19
+from model import vgg19
 import cv2
 import copy
 import numpy as np
@@ -112,4 +112,4 @@ def detect_crowd(image):
 
             # 重心を描画
             cluster_center = np.mean(cluster_points, axis=0)
-            cv2.circle(image, (cluster_center[0], cluster_center[1]), 5, (0, 0, 255), -1)
+            cv2.circle(image, (int(cluster_center[0]), int(cluster_center[1])), 5, (0, 0, 255), -1)

@@ -221,10 +221,12 @@ def run(
                 # draw boxes for visualization
                 if len(outputs[i]) > 0:
                     for j, (output, conf) in enumerate(zip(outputs[i], confs)):
-    
                         bboxes = output[0:4]
                         id = output[4]
                         cls = output[5]
+
+                        # personクラス以外を出力しないために追加
+                        if int(cls) != 0: continue
 
                         if save_txt:
                             # to MOT format

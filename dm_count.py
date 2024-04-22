@@ -69,7 +69,7 @@ def detect_crowd(image):
     threshold_img = img.copy()
     threshold_img[threshold_img < threshold_value] = 0
     
-    # 特徴マップの作成（ここでは単純に青チャンネルを使用）
+    # 特徴マップの作成（ここでは単純に青チャンネルを使用
     feature_map = threshold_img[:, :, 1]
 
     # 黒色以外のピクセルを取得

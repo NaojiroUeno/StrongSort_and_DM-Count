@@ -159,6 +159,9 @@ def run(
         t2 = time_synchronized()
         dt[0] += t2 - t1
 
+        # 重心のリストを保存(added)
+        center = []
+
         # Inference
         visualize = increment_path(save_dir / Path(path[0]).stem, mkdir=True) if visualize else False
         pred = model(im)
@@ -228,6 +231,10 @@ def run(
                         # personクラス以外を出力しないために追加
                         if int(cls) != 0: continue
 
+                        x_center = (output[0] + output[2]) / 2
+                        y_center = (output[1] + output[3]) / 2
+                        center.append([x_center, y_center])
+
                         if save_txt:
                             # to MOT format
                             bbox_left = output[0]
@@ -244,10 +251,15 @@ def run(
                             id = int(id)  # integer id
                             label = None if hide_labels else (f'{id} {names[c]}' if hide_conf else \
                                 (f'{id} {conf:.2f}' if hide_class else f'{id} {names[c]} {conf:.2f}'))
-                            plot_one_box(bboxes, im0, label=label, color=colors[int(cls)], line_thickness=2)
+                            # ここでYOLOのボックスを出力しているので一旦削除(added)
+                            # plot_one_box(bboxes, im0, label=label, color=colors[int(cls)], line_thickness=2)
                             if save_crop:
                                 txt_file_name = txt_file_name if (isinstance(path, list) and len(path) > 1) else ''
                                 save_one_box(bboxes, imc, file=save_dir / 'crops' / txt_file_name / names[c] / f'{id}' / f'{p.stem}.jpg', BGR=True)
+                # addeds
+                print(center)
+                for j in range(len(center)):
+                    cv2.circle(im0, (int(center[j][0]), int(center[j][1])), 5, (0, 255, 0), -1)
 
                 print(f'{s}Done. YOLO:({t3 - t2:.3f}s), StrongSORT:({t5 - t4:.3f}s)')
 
@@ -274,7 +286,8 @@ def run(
                         fps, w, h = 30, im0.shape[1], im0.shape[0]
                     save_path = str(Path(save_path).with_suffix('.mp4'))  # force *.mp4 suffix on results videos
                     vid_writer[i] = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (w, h))
-                detect_crowd(im0)
+                # ここを実行すると密度推定実行(added)
+                # detect_crowd(im0)
                 vid_writer[i].write(im0)
 
             prev_frames[i] = curr_frames[i]

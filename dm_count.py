@@ -72,20 +72,6 @@ def detect_crowd(image):
     # 特徴マップの作成（ここでは単純に青チャンネルを使用
     feature_map = threshold_img[:, :, 1]
 
-    # 黒色以外のピクセルを取得
-    non_black_pixels = feature_map[feature_map > 0].reshape(-1, 1)
-
-    # K平均クラスタリング
-    kmeans = KMeans(n_clusters=1)  # クラスタ数は適宜調整
-    kmeans.fit(non_black_pixels)
-
-    # クラスタに各ピクセルを割り当て
-    labels = kmeans.predict(non_black_pixels)
-
-    # クラスタごとに色を割り当てる
-    clustered_image = np.zeros_like(feature_map)
-    clustered_image[feature_map > 0] = labels + 1  # 0は背景なのでクラスタ番号を1から始める
-
     # 特徴マップの作成（ここでは単純に青チャンネルを使用）
     ##### おそらくこのままで動くがfeature_mapがそのままでいいのかは吟味する必要がある #############
     # feature_map = image[:, :, 1]
@@ -112,4 +98,4 @@ def detect_crowd(image):
 
             # 重心を描画
             cluster_center = np.mean(cluster_points, axis=0)
-            cv2.circle(image, (int(cluster_center[0]), int(cluster_center[1])), 5, (0, 0, 255), -1)
+            cv2.circle(image, (int(cluster_center[1]), int(cluster_center[0])), 10, (0, 0, 255), -1)

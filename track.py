@@ -257,10 +257,12 @@ def run(
                                 txt_file_name = txt_file_name if (isinstance(path, list) and len(path) > 1) else ''
                                 save_one_box(bboxes, imc, file=save_dir / 'crops' / txt_file_name / names[c] / f'{id}' / f'{p.stem}.jpg', BGR=True)
                 # addeds
-                print(center)
+                # print(center)
                 for j in range(len(center)):
                     cv2.circle(im0, (int(center[j][0]), int(center[j][1])), 5, (0, 255, 0), -1)
-
+                    for k in range(j+1, len(center)):
+                      if abs(int(center[j][0]) - int(center[k][0])) < 50 and abs(int(center[j][1]) - int(center[k][1])) < 50:
+                        cv2.line(im0, (int(center[j][0]), int(center[j][1])),(int(center[k][0]), int(center[k][1])), (255, 0, 0), 3)
                 print(f'{s}Done. YOLO:({t3 - t2:.3f}s), StrongSORT:({t5 - t4:.3f}s)')
 
             else:

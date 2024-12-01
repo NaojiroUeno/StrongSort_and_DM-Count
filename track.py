@@ -103,6 +103,7 @@ def run(
     
     WEIGHTS.mkdir(parents=True, exist_ok=True)
     model = attempt_load(Path(yolo_weights), map_location=device)  # load FP32 model
+    # model内のnameは80個の種類があり、1つ目がpreson
     names, = model.names,
     stride = model.stride.max().cpu().numpy()  # model stride
     imgsz = check_img_size(imgsz[0], s=stride)  # check image size
@@ -222,6 +223,7 @@ def run(
                 dt[3] += t5 - t4
 
                 # draw boxes for visualization
+                # if len(outputs[i]) > 0 and if output[5] == 0: # これでpersonクラス以外を排除できるはず
                 if len(outputs[i]) > 0:
                     for j, (output, conf) in enumerate(zip(outputs[i], confs)):
                         bboxes = output[0:4]
@@ -289,7 +291,8 @@ def run(
                     save_path = str(Path(save_path).with_suffix('.mp4'))  # force *.mp4 suffix on results videos
                     vid_writer[i] = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (w, h))
                 # ここを実行すると密度推定実行(added)
-                # detect_crowd(im0)
+                if frame_idx % 10 == 0:
+                    detect_crowd(im0)
                 vid_writer[i].write(im0)
 
             prev_frames[i] = curr_frames[i]

@@ -292,8 +292,13 @@ def run(
                     vid_writer[i] = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (w, h))
                 # ここを実行すると密度推定実行(added)
                 if frame_idx % 10 == 0:
-                    detect_crowd(im0)
-                vid_writer[i].write(im0)
+                    result_image = detect_crowd(im0)
+                    # vid_writer[i].write(result_image)
+                else:
+                    # vid_writer[i].write(result_image)
+                    pass
+                combine_image = cv2.addWeighted(im0, 0.7, result_image, 0.3, 0)
+                vid_writer[i].write(combine_image)
 
             prev_frames[i] = curr_frames[i]
 

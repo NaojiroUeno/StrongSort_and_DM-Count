@@ -224,3 +224,4 @@ def detect_crowd(image):
             # # 重心を描画
             # cluster_center = np.mean(cluster_points, axis=0)
             # plt.scatter(cluster_center[1], cluster_center[0], marker='X', s=100, c='red')
+    return image

@@ -39,10 +39,16 @@ from strong_sort.utils.parser import get_config
 from strong_sort.strong_sort import StrongSORT
 
 from dm_count import detect_crowd
+import time
 
 
 VID_FORMATS = 'asf', 'avi', 'gif', 'm4v', 'mkv', 'mov', 'mp4', 'mpeg', 'mpg', 'ts', 'wmv'  # include video suffixes
 
+def restore_original_shape(im_resized, original_shape):
+        im_restored = cv2.resize(im_resized, (original_shape[2], original_shape[1]))  # 元のサイズに戻す
+        if len(original_shape) == 3 and original_shape[0] == 3:  # (C, H, W) に戻す場合
+            im_restored = im_restored.transpose(2, 0, 1)  # (H, W, C) → (C, H, W)
+        return im_restored
 
 @torch.no_grad()
 def run(
@@ -152,7 +158,23 @@ def run(
     for frame_idx, (path, im, im0s, vid_cap) in enumerate(dataset):
         s = ''
         t1 = time_synchronized()
-        im = torch.from_numpy(im).to(device)
+
+        original_shape = im.shape
+        im = cv2.resize(im.transpose(1, 2, 0), (im0s.shape[1], im0s.shape[0]))
+
+        im = cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
+        if frame_idx % 10 == 0:
+            all_hull_points = detect_crowd(im)
+        else:
+            pass
+        for hull_points in all_hull_points:
+          hull_points = np.array(hull_points, dtype=np.int32)  # 整数型に変換
+          if hull_points.ndim == 2:
+            hull_points = hull_points.reshape((-1, 1, 2))
+          cv2.fillPoly(im, [hull_points], color=(0, 0, 0))
+        im = restore_original_shape(im, original_shape)
+        im = torch.from_numpy(im).to(device) # このコードでimがndarrayからTensorになっている
+        
         im = im.half() if half else im.float()  # uint8 to fp16/32
         im /= 255.0  # 0 - 255 to 0.0 - 1.0
         if len(im.shape) == 3:
@@ -165,6 +187,7 @@ def run(
 
         # Inference
         visualize = increment_path(save_dir / Path(path[0]).stem, mkdir=True) if visualize else False
+
         pred = model(im)
         t3 = time_synchronized()
         dt[1] += t3 - t2
@@ -184,6 +207,7 @@ def run(
                 save_path = str(save_dir / p.name) + str(i)  # im.jpg, vid.mp4, ...
             else:
                 p, im0, _ = path, im0s.copy(), getattr(dataset, 'frame', 0)
+  
                 p = Path(p)  # to Path
                 # video file
                 if source.endswith(VID_FORMATS):
@@ -277,30 +301,30 @@ def run(
                 cv2.waitKey(1)  # 1 millisecond
 
             # Save results (image with detections)
-            if save_vid:
-                if vid_path[i] != save_path:  # new video
-                    vid_path[i] = save_path
-                    if isinstance(vid_writer[i], cv2.VideoWriter):
-                        vid_writer[i].release()  # release previous video writer
-                    if vid_cap:  # video
-                        fps = vid_cap.get(cv2.CAP_PROP_FPS)
-                        w = int(vid_cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-                        h = int(vid_cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-                    else:  # stream
-                        fps, w, h = 30, im0.shape[1], im0.shape[0]
-                    save_path = str(Path(save_path).with_suffix('.mp4'))  # force *.mp4 suffix on results videos
-                    vid_writer[i] = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (w, h))
-                # ここを実行すると密度推定実行(added)
-                if frame_idx % 10 == 0:
-                    result_image = detect_crowd(im0)
-                    # vid_writer[i].write(result_image)
-                else:
-                    # vid_writer[i].write(result_image)
-                    pass
-                combine_image = cv2.addWeighted(im0, 0.7, result_image, 0.3, 0)
-                vid_writer[i].write(combine_image)
-
-            prev_frames[i] = curr_frames[i]
+        if save_vid:
+            if vid_path[i] != save_path:  # new video
+                vid_path[i] = save_path
+                if isinstance(vid_writer[i], cv2.VideoWriter):
+                    vid_writer[i].release()  # release previous video writer
+                if vid_cap:  # video
+                    fps = vid_cap.get(cv2.CAP_PROP_FPS)
+                    w = int(vid_cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                    h = int(vid_cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                else:  # stream
+                    fps, w, h = 30, im0.shape[1], im0.shape[0]
+                save_path = str(Path(save_path).with_suffix('.mp4'))  # force *.mp4 suffix on results videos
+                vid_writer[i] = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (w, h))
+            
+            # if frame_idx % 10 == 0:
+            #     all_hull_points = detect_crowd(im0)
+            # else:
+            #     pass
+            for hull_points in all_hull_points:
+                # hull_points = np.array(hull_points, dtype=np.int32)  # 整数型に変換
+                cv2.polylines(im0, [hull_points], isClosed=True, color=(255, 0, 0), thickness=2)
+            
+            vid_writer[i].write(im0)
+        prev_frames[i] = curr_frames[i]
 
     # Print results
     t = tuple(x / seen * 1E3 for x in dt)  # speeds per image
@@ -357,4 +381,11 @@ def main(opt):
 
 if __name__ == "__main__":
     opt = parse_opt()
+    start_time = time.time()
     main(opt)
+    end_time = time.time()
+    elapsed_time = end_time - start_time
+    minutes, seconds = divmod(elapsed_time, 60)
+
+    print(f"実行時間: {int(minutes)} 分 {seconds:.2f} 秒")
+

@@ -155,26 +155,39 @@ def run(
     # Run tracking
     dt, seen = [0.0, 0.0, 0.0, 0.0], 0
     curr_frames, prev_frames = [None] * nr_sources, [None] * nr_sources
+    all_hull_points = []
     for frame_idx, (path, im, im0s, vid_cap) in enumerate(dataset):
         s = ''
         t1 = time_synchronized()
 
         original_shape = im.shape
-        im = cv2.resize(im.transpose(1, 2, 0), (im0s.shape[1], im0s.shape[0]))
+        # print("im shape:  ", im.shape)
+        # im = cv2.resize(im.transpose(1, 2, 0), (1074, 532))
 
-        im = cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
+        # im = cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
+        # all_hull_points = []
+        im_copy = im.copy()
+        im_copy = cv2.resize(im_copy.transpose(1, 2, 0), (1074, 532))
         if frame_idx % 10 == 0:
-            all_hull_points = detect_crowd(im)
+            all_hull_points = detect_crowd(im_copy)
+            scale_x = 640 / 1074
+            scale_y = 384 / 532
+            scaled_YOLO_hull_points = []
+            for hull_points in all_hull_points:
+                scaled_points = hull_points * [scale_x, scale_y]  # x, y方向にスケーリング
+                scaled_YOLO_hull_points.append(scaled_points.astype(int))  # 整数に変換
         else:
             pass
-        for hull_points in all_hull_points:
+
+        im = im.transpose(1, 2, 0)
+        im = np.ascontiguousarray(im)
+        for hull_points in scaled_YOLO_hull_points:
           hull_points = np.array(hull_points, dtype=np.int32)  # 整数型に変換
           if hull_points.ndim == 2:
             hull_points = hull_points.reshape((-1, 1, 2))
           cv2.fillPoly(im, [hull_points], color=(0, 0, 0))
-        im = restore_original_shape(im, original_shape)
+ 
         im = torch.from_numpy(im).to(device) # このコードでimがndarrayからTensorになっている
-        
         im = im.half() if half else im.float()  # uint8 to fp16/32
         im /= 255.0  # 0 - 255 to 0.0 - 1.0
         if len(im.shape) == 3:
@@ -188,6 +201,8 @@ def run(
         # Inference
         visualize = increment_path(save_dir / Path(path[0]).stem, mkdir=True) if visualize else False
 
+        im = im.permute(0, 3, 1, 2)
+
         pred = model(im)
         t3 = time_synchronized()
         dt[1] += t3 - t2
@@ -195,8 +210,14 @@ def run(
         # Apply NMS
         pred = non_max_suppression(pred[0], conf_thres, iou_thres, classes, agnostic_nms)
         dt[2] += time_synchronized() - t3
-        
-        # Process detections
+
+        scale_x = im0s.shape[1] / 1074
+        scale_y = im0s.shape[0] / 532
+        scaled_draw_hull_points = []
+        for hull_points in all_hull_points:
+            scaled_points = hull_points * [scale_x, scale_y]  # x, y方向にスケーリング
+            scaled_draw_hull_points.append(scaled_points.astype(int))  # 整数に変換
+        # # Process detections
         for i, det in enumerate(pred):  # detections per image
             seen += 1
             if webcam:  # nr_sources >= 1
@@ -219,6 +240,7 @@ def run(
                     save_path = str(save_dir / p.parent.name)  # im.jpg, vid.mp4, ..
 
             curr_frames[i] = im0
+            # print("im0 shape:  ", im0.shape)
 
             txt_path = str(save_dir / 'tracks' / txt_file_name)  # im.txt
             s += '%gx%g ' % im.shape[2:]  # print string
@@ -287,7 +309,7 @@ def run(
                 for j in range(len(center)):
                     cv2.circle(im0, (int(center[j][0]), int(center[j][1])), 5, (0, 255, 0), -1)
                     for k in range(j+1, len(center)):
-                      if abs(int(center[j][0]) - int(center[k][0])) < 50 and abs(int(center[j][1]) - int(center[k][1])) < 50:
+                      if abs(int(center[j][0]) - int(center[k][0])) < 80 and abs(int(center[j][1]) - int(center[k][1])) < 80:
                         cv2.line(im0, (int(center[j][0]), int(center[j][1])),(int(center[k][0]), int(center[k][1])), (255, 0, 0), 3)
                 print(f'{s}Done. YOLO:({t3 - t2:.3f}s), StrongSORT:({t5 - t4:.3f}s)')
 
@@ -314,16 +336,12 @@ def run(
                     fps, w, h = 30, im0.shape[1], im0.shape[0]
                 save_path = str(Path(save_path).with_suffix('.mp4'))  # force *.mp4 suffix on results videos
                 vid_writer[i] = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (w, h))
-            
-            # if frame_idx % 10 == 0:
-            #     all_hull_points = detect_crowd(im0)
-            # else:
-            #     pass
-            for hull_points in all_hull_points:
-                # hull_points = np.array(hull_points, dtype=np.int32)  # 整数型に変換
-                cv2.polylines(im0, [hull_points], isClosed=True, color=(255, 0, 0), thickness=2)
-            
+            for hull_points in scaled_draw_hull_points:
+                hull_points = np.array(hull_points, dtype=np.int32)  # 整数型に変換
+                cv2.polylines(im0, [hull_points], isClosed=True, color=(255, 0, 0), thickness=7)
+              
             vid_writer[i].write(im0)
+        # cv2.imwrite('output_image.jpg', im0)
         prev_frames[i] = curr_frames[i]
 
     # Print results

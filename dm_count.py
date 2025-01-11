@@ -53,41 +53,27 @@ def create_color_map(result_map, image):
     # リサイズして元画像と合成
     image_width, image_height = image.shape[1], image.shape[0]
     color_map = cv2.resize(color_map, dsize=(image_width, image_height))
-    # debug_image = cv2.addWeighted(image, 0.35, color_map, 0.65, 1.0)
-    debug_image = cv2.addWeighted(image, 0.30, color_map, 0.70, 1.0)
+    
+    return color_map
 
-    return color_map, debug_image
-
-def detect_crowd(image, threshold_value=0.40, y_extension=120):
+def detect_crowd(image, threshold_value=0.40, y_extension=50):
     result_map, count = inference(model, image)
-    color_map, img = create_color_map(result_map, image)
-    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    color_map = create_color_map(result_map, image)
+    img = cv2.cvtColor(color_map, cv2.COLOR_BGR2RGB)
 
     img = (img - 127.5) / 127.5
     img = 0.5 * img + 0.5
-    plt.imshow(img)
-
-    # threshold_value = 0.40
+   
     threshold_img = img.copy()
     threshold_img[threshold_img < threshold_value] = 0
     
     # 特徴マップの作成（ここでは単純に青チャンネルを使用
     feature_map = threshold_img[:, :, 1]
 
-    # 特徴マップの作成（ここでは単純に青チャンネルを使用）
-    ##### おそらくこのままで動くがfeature_mapがそのままでいいのかは吟味する必要がある #############
-    # feature_map = image[:, :, 1]
-
     # 黒色以外のピクセルを取得
     non_black_pixels = np.column_stack(np.where(feature_map > 0))
 
-    # Mean Shiftクラスタリングを行うための帯域幅を推定
-    bandwidth = estimate_bandwidth(non_black_pixels, quantile=0.2, n_samples=500)
-
-    # Mean Shiftクラスタリング
-    # meanshift = MeanShift(bandwidth=bandwidth, bin_seeding=True)
-    # labels = meanshift.fit_predict(non_black_pixels)
-    dbscan = DBSCAN(eps=100, min_samples=2)  # epsやmin_samplesは適宜調整
+    dbscan = DBSCAN(eps=70, min_samples=15)  # epsやmin_samplesは適宜調整
     labels = dbscan.fit_predict(non_black_pixels)
 
     # クラスタに各ピクセルを割り当て
@@ -102,6 +88,7 @@ def detect_crowd(image, threshold_value=0.40, y_extension=120):
     unique_labels = np.unique(labels)
 
     all_hull_points = []
+    hull_points_extended = []
 
     for label in unique_labels:
         cluster_points = non_black_pixels[labels == label]
@@ -114,13 +101,27 @@ def detect_crowd(image, threshold_value=0.40, y_extension=120):
                 # 凸包を描画
                 hull_points = hull_points.reshape((-1, 2))  # OpenCVの形式に変換
 
-                max_y = np.max(hull_points[:, 1])
-                hull_points_extended = hull_points.copy()
-                for i, point in enumerate(hull_points):
-                    if point[1] == max_y:  # 最大 y 座標の点を確認
-                        hull_points_extended[i, 1] += y_extension  # 下に延長
+                original_hull_points = hull_points.copy()
+
+                # 2. 元の図形を下方向に平行移動して新しい図形を作成
+                translated_hull_points = original_hull_points.copy()
+                translated_hull_points[:, 1] += y_extension  # y座標をオフセット分だけ下方向に移動
+
+                # 3. 元の図形と平行移動した図形を結び、間を塗りつぶす
+                # 元の図形と平行移動した図形を適切な順序で結合して大きな多角形を作成
+                hull_points_extended = np.vstack((original_hull_points, translated_hull_points[::-1]))
+
+                # 順序を時計回りに揃える
+                hull_points_extended = cv2.convexHull(hull_points_extended)
 
             # 凸包を描画（延長された形）
             hull_points_extended = hull_points_extended.reshape((-1, 1, 2))  # OpenCVの形式に変換
             all_hull_points.append(hull_points_extended)
+    
+    # for hull_points in all_hull_points:
+    #       hull_points = np.array(hull_points, dtype=np.int32)  # 整数型に変換
+    #       if hull_points.ndim == 2:
+    #         hull_points = hull_points.reshape((-1, 1, 2))
+    #       cv2.fillPoly(image, [hull_points], color=(0, 0, 0))
+    # cv2.imwrite('output_dm-count_image.jpg', image)
     return all_hull_points
